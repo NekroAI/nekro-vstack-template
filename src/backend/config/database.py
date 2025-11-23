@@ -31,25 +31,33 @@ async def run_migrations():
     """
     运行 Aerich 数据库迁移
     仅在 Windows 桌面应用环境 (frozen) 且使用 SQLite 时调用
+
+    注意：此函数失败会抛出异常，阻止应用启动。
+    严禁在此处掩盖错误或进行降级处理。
     """
+    # 1. 确定 migrations 目录位置
+    if getattr(sys, "frozen", False):
+        # 打包环境: 尝试多个可能的位置
+        # PyInstaller onedir 模式下，datas 可能在 root 或 _internal
+        base_dir = Path(sys.executable).parent
+        possible_paths = [
+            base_dir / "migrations",
+            base_dir / "_internal" / "migrations",
+        ]
+        migrations_dir = next((p for p in possible_paths if p.exists()), None)
+    else:
+        # 开发环境: 项目根目录/migrations
+        migrations_dir = Path("migrations")
+
+    # 严禁掩盖问题：如果生产环境找不到迁移文件，必须报错
+    if not migrations_dir:
+        error_msg = f"❌ CRITICAL: Migrations directory NOT found. Searched in: {possible_paths}"
+        logger.critical(error_msg)
+        raise RuntimeError(error_msg)
+
+    logger.info(f"🔄 Running migrations from {migrations_dir}...")
+
     try:
-        # 1. 确定 migrations 目录位置
-        if getattr(sys, "frozen", False):
-            # 打包环境: _internal/migrations
-            base_dir = Path(sys.executable).parent
-            migrations_dir = base_dir / "migrations"
-        else:
-            # 开发环境: 项目根目录/migrations
-            migrations_dir = Path("migrations")
-
-        if not migrations_dir.exists():
-            logger.warning(
-                f"⚠️ Migrations directory not found at {migrations_dir}, skipping migrations.",
-            )
-            return
-
-        logger.info(f"🔄 Running migrations from {migrations_dir}...")
-
         # 2. 初始化 Aerich Command
         command = Command(tortoise_config=TORTOISE_ORM, location=str(migrations_dir))
 
@@ -58,7 +66,6 @@ async def run_migrations():
 
         # 4. 尝试初始化 aerich 表 (如果不存在)
         # safe=True 保证如果表已存在不报错
-        # 这通常用于首次安装
         await command.init_db(safe=True)
 
         # 5. 执行升级
@@ -68,9 +75,9 @@ async def run_migrations():
         logger.success("✅ Database migrations applied successfully.")
 
     except Exception as e:
-        logger.exception(f"❌ Failed to run migrations: {e}")
-        # 在桌面应用中，迁移失败可能意味着数据损坏或版本不兼容
-        # 但我们尽量不让应用崩溃，而是记录错误
+        # 严禁掩盖问题：迁移失败必须抛出异常
+        logger.critical(f"❌ Database migration FAILED: {e}")
+        raise
 
 
 async def init_db():
@@ -82,7 +89,7 @@ async def init_db():
 
     # 策略：
     # 1. 开发环境：总是尝试生成表结构 (快速开发)
-    # 2. 生产环境且使用 SQLite（桌面版场景）：使用 Aerich 迁移系统
+    # 2. 生产环境且使用 SQLite（桌面版场景）：必须且只能使用 Aerich 迁移系统
     # 3. 生产环境且使用服务器数据库：应手动使用 Aerich 迁移工具
 
     is_sqlite = settings.DATABASE_URL.startswith("sqlite://")
@@ -96,6 +103,7 @@ async def init_db():
 
     elif is_sqlite and is_frozen:
         # 桌面版生产环境：自动迁移
+        # 如果失败，直接崩溃，绝不使用 generate_schemas 兜底
         await run_migrations()
 
 

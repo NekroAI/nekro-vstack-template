@@ -4,6 +4,8 @@ from pathlib import Path
 import os
 import sys
 from PyInstaller.utils.hooks import copy_metadata
+# 引入 Tree 以便更强力地包含目录
+from PyInstaller.building.datastruct import Tree
 
 block_cipher = None
 
@@ -13,7 +15,6 @@ BACKEND_DIR = BASE_DIR / "src" / "backend"
 
 # 定义静态文件路径
 STATIC_DIR = BASE_DIR / "dist"  # 前端构建产物目录
-ASSETS_DIR = BASE_DIR / "src" / "assets"
 
 # 检查前端构建是否完成
 if not STATIC_DIR.exists():
@@ -24,11 +25,20 @@ if not STATIC_DIR.exists():
 datas = [
     (str(STATIC_DIR), "static"),  # 将 dist 映射到 _internal/static
     (str(BASE_DIR / "openapi.json"), "."),
-    (str(BASE_DIR / "migrations"), "migrations"),
 ]
 
 # 修复: 显式复制 tortoise-orm 的元数据，解决 importlib.metadata.PackageNotFoundError
 datas += copy_metadata("tortoise-orm")
+
+# 核心修复: 使用 Tree 强制包含 migrations 目录下的所有文件（包括 .py）作为数据文件
+# 避免 PyInstaller 自动分析过滤掉未被导入的 .py 迁移脚本
+migrations_path = BASE_DIR / "migrations"
+if migrations_path.exists():
+    # Tree(src_root, prefix=dest_root)
+    # 这会将 migrations 文件夹下的所有内容完整复制到打包产物的 migrations 目录下
+    datas += [Tree(str(migrations_path), prefix='migrations')]
+else:
+    print(f"Warning: Migrations directory not found at {migrations_path}")
 
 # 隐藏导入：Tortoise ORM 和其他动态加载的库可能需要
 hiddenimports = [
@@ -102,4 +112,3 @@ coll = COLLECT(
     upx_exclude=[],
     name='NekroVStack',
 )
-

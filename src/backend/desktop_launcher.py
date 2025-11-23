@@ -21,6 +21,30 @@ if getattr(sys, "frozen", False):
     os.environ["STATIC_FILES_DIR"] = str(static_dir.resolve())
     print(f"📂 Static files directory set to: {os.environ['STATIC_FILES_DIR']}")
 
+    # --- 诊断信息 (用于排查 migrations 丢失问题) ---
+    print(f"🔍 Diagnostic: Checking directory contents of {base_dir}")
+    try:
+        items = [p.name for p in base_dir.iterdir()]
+        print(f"   Contents: {items}")
+
+        migrations_check = base_dir / "migrations"
+        if migrations_check.exists():
+            mig_items = [p.name for p in migrations_check.iterdir()]
+            print(f"   ✅ 'migrations' folder found. Contents: {mig_items}")
+        else:
+            print(f"   ❌ 'migrations' folder NOT found at {migrations_check}")
+            # 尝试检查 _internal
+            internal_dir = base_dir / "_internal"
+            if internal_dir.exists():
+                internal_items = [p.name for p in internal_dir.iterdir()]
+                print(f"   Checking _internal: {internal_items}")
+                mig_internal = internal_dir / "migrations"
+                if mig_internal.exists():
+                    print("   ✅ 'migrations' found in _internal.")
+    except Exception as e:
+        print(f"   Diagnostic failed: {e}")
+    # -----------------------------------------------
+
 import uvicorn
 
 from src.backend.config.settings import settings
