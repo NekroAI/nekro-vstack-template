@@ -51,6 +51,8 @@ hiddenimports = [
     "tortoise.contrib.pydantic",
     # importlib.metadata 兼容性
     "importlib_metadata",
+    # aerich 迁移工具
+    "aerich.models",
 ]
 
 a = Analysis(
