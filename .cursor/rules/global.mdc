@@ -1,0 +1,432 @@
+---
+alwaysApply: true
+---
+
+# Nekro VStack AI 开发指南
+
+## 项目定位
+
+**Nekro VStack** = 垂直切分架构的 AI 友好全栈开发模板
+
+**核心理念**：前后端代码按功能聚合，优化 AI 理解和检索效率。
+
+---
+
+## 架构规则
+
+### 目录结构
+
+```
+src/
+├── features/          # 功能模块（垂直切分）
+│   └── [feature]/
+│       ├── frontend/  # 页面 + API
+│       └── backend/   # 路由 + 模型 + Schemas
+├── backend/core/      # 后端核心（安全、异常、日志）
+├── frontend/
+│   ├── core/          # 技术基础设施（HTTP、路由、类型、主题、动画）
+│   │   ├── theme/     # MacOS 风格主题定义
+│   │   └── animation/ # Framer Motion 动画预设
+│   ├── shared/        # 共享业务逻辑（组件、hooks、状态）
+│   └── utils/         # 纯工具函数
+```
+
+### 依赖规则
+
+**层次**: `utils/ → core/ → shared/ → features/`
+
+**约束**:
+
+- ✅ 高层可依赖低层
+- ❌ Features 之间禁止直接依赖
+- ❌ 同层禁止相互依赖
+- ❌ core/ 禁止包含业务逻辑
+
+---
+
+## 技术栈
+
+### 后端 (Python 3.11+)
+
+- FastAPI + Pydantic v2
+- Tortoise-ORM + Aerich
+- bcrypt + python-jose (JWT)
+- Loguru (日志)
+- **psutil** (系统监控)
+- **uv** (包管理，禁止 pip)
+
+### 前端 (TypeScript 5.6+)
+
+- React 18 + React Router v7
+- Zustand (状态管理)
+- MUI v6 (Material UI, 深度定制 MacOS 风格)
+- **Framer Motion** (动画库)
+- Axios + openapi-typescript
+- Vite
+- **pnpm** (包管理)
+
+---
+
+## 设计规范 (MacOS 风格)
+
+### 1. 视觉语言
+
+- **字体**: **Inter** (`@fontsource/inter`) 作为首选字体，后备 System Font Stack。
+- **圆角**: 统一使用较大圆角 (12px - 16px)
+- **质感**: 广泛使用毛玻璃效果 (`backdrop-filter: blur(20px)`) + 半透明背景
+- **阴影**: 使用柔和的扩散阴影，避免生硬的边框
+- **颜色**: ❌ 禁止硬编码颜色 (如 `#fff`, `rgba(0,0,0,0.5)`)。✅ 必须使用 `theme.palette` (如 `background.paper`, `action.hover`) 和 `alpha()` 函数以支持明暗模式自动切换。
+
+### 2. 动画规范
+
+使用 Framer Motion 实现优雅的过渡效果。预设在 `src/frontend/core/animation/`。
+
+- **页面切换**: 使用 `pageVariants` 实现平滑的模糊上浮进场。
+- **列表加载**: 使用 `containerVariants` 和 `itemVariants` 实现子元素交错进场 (Stagger)。
+- **交互反馈**: 按钮和可交互元素使用 `scaleVariants` (Spring physics) 提供点击反馈。
+
+```typescript
+import { motion } from 'framer-motion'
+import { containerVariants, itemVariants } from '@/frontend/core/animation'
+
+<Stack component={motion.div} variants={containerVariants} initial="hidden" animate="show">
+  <Box component={motion.div} variants={itemVariants}>Item 1</Box>
+  <Box component={motion.div} variants={itemVariants}>Item 2</Box>
+</Stack>
+```
+
+### 3. 主题系统
+
+- **模式**: 支持 Light/Dark 模式无缝切换
+- **调色盘**: 内置 Blue, Purple, Green, Orange 四套强调色
+- **状态管理**: 使用 `useThemeStore` (persist) 自动持久化用户偏好
+
+### 4. 响应式规范
+
+- **Breakpoints**: 使用 MUI 默认断点 (xs, sm, md, lg, xl)。
+- **Grid**: 必须使用 `Grid2` 组件。
+- **移动端适配**: 侧边栏在 md 以下自动折叠为抽屉。
+
+---
+
+## 开发规范
+
+### 1. 路径别名（强制）
+
+```typescript
+// ✅ 正确
+import { httpClient } from '@/frontend/core/http'
+import { userAPI } from '@/features/user/frontend'
+import type { User } from '@/frontend/core/types'
+
+// ❌ 禁止
+import { httpClient } from '../../../../core/http'
+```
+
+### 2. 类型使用
+
+```typescript
+// ✅ 使用生成的类型
+import type { User } from '@/frontend/core/types'
+
+// ❌ 禁止重复定义
+interface User { ... }  // generated.ts 中已有
+
+// ⚠️ 扩展类型在 @/frontend/core/types/api.ts
+export interface UserFormData extends Pick<User, 'username'> {
+  confirmPassword?: string
+}
+```
+
+### 3. 错误处理
+
+**后端**:
+
+```python
+from src.backend.core.exceptions import APIError
+
+raise APIError(code="NOT_FOUND", message="资源不存在", status_code=404)
+```
+
+**前端**:
+
+```typescript
+// HTTP 拦截器自动处理，组件可选清理
+try {
+  await api.doSomething()
+} catch (error) {
+  console.error(error) // 可选
+}
+```
+
+### 4. 文件命名
+
+| 类型         | 规范       | 示例              |
+| ------------ | ---------- | ----------------- |
+| Feature 目录 | kebab-case | `user-profile/`   |
+| React 组件   | PascalCase | `UserProfile.tsx` |
+| TypeScript   | camelCase  | `api.ts`          |
+| Python       | snake_case | `user_service.py` |
+
+---
+
+## 快速命令
+
+### 开发
+
+```bash
+pnpm dev:all              # 启动前后端
+pnpm dev:backend          # 仅后端
+pnpm dev:frontend         # 仅前端
+```
+
+### 数据库
+
+```bash
+pnpm db:generate --name "说明"  # 生成迁移
+pnpm db:migrate                 # 应用迁移
+pnpm db:rollback                # 回滚
+```
+
+### 类型
+
+```bash
+pnpm generate:types       # 生成前端类型
+```
+
+### 检查
+
+```bash
+pnpm type-check           # TypeScript 检查
+pnpm lint                 # ESLint
+pnpm lint:backend         # Ruff 检查
+```
+
+---
+
+## 添加新功能（标准流程）
+
+### 1. 创建结构
+
+```bash
+mkdir -p src/features/blog/{frontend/pages,backend}
+```
+
+### 2. 后端开发
+
+```python
+# backend/models.py - 数据模型
+from tortoise import fields, models
+
+class Post(models.Model):
+    id = fields.IntField(pk=True)
+    title = fields.CharField(max_length=200)
+
+    class Meta:
+        table = "blog_posts"
+
+# backend/schemas.py - 验证模型
+from pydantic import BaseModel
+
+class PostResponse(BaseModel):
+    id: int
+    title: str
+
+    class Config:
+        from_attributes = True
+
+# backend/router.py - API 路由
+from fastapi import APIRouter
+
+router = APIRouter(prefix="/blog", tags=["博客"])
+
+@router.get("/", response_model=list[PostResponse])
+async def list_posts():
+    return await Post.all()
+```
+
+### 3. 注册后端
+
+```python
+# src/backend/main.py
+from src.features.blog.backend.router import router as blog_router
+app.include_router(blog_router, prefix="/api/blog")
+
+# src/backend/config/database.py
+"models": ["src.features.blog.backend.models", ...]
+```
+
+### 4. 数据库迁移
+
+```bash
+pnpm db:generate --name "add_blog"
+pnpm db:migrate
+```
+
+### 5. 前端开发
+
+```typescript
+// frontend/api.ts
+import { httpClient } from '@/frontend/core/http'
+
+export const blogAPI = {
+  async getPosts() {
+    const { data } = await httpClient.get('/blog/')
+    return data
+  },
+}
+
+// frontend/pages/BlogPage.tsx
+import { blogAPI } from '@/features/blog/frontend'
+
+export default function BlogPage() {
+  // 使用 API
+}
+
+// frontend/index.ts
+export * from './api'
+```
+
+### 6. 注册前端路由
+
+```typescript
+// src/frontend/core/router/index.tsx
+import BlogPage from '@/features/blog/frontend/pages/BlogPage'
+
+// 添加路由配置
+```
+
+### 7. 生成类型
+
+```bash
+pnpm generate:types
+```
+
+---
+
+## 依赖管理
+
+### Python (必须用 uv)
+
+```bash
+uv add <package>           # 添加
+uv add --dev <package>     # 开发依赖
+uv remove <package>        # 移除
+```
+
+❌ 禁止: `pip install` 或手动编辑 `pyproject.toml`
+
+### Node.js
+
+```bash
+pnpm add <package>         # 添加
+pnpm add -D <package>      # 开发依赖
+```
+
+---
+
+## 禁止行为
+
+1. ❌ Feature 之间直接导入
+2. ❌ 使用 pip 管理 Python 依赖
+3. ❌ 手动编辑 pyproject.toml dependencies
+4. ❌ 使用相对路径导入
+5. ❌ 在 core/ 中放业务逻辑
+6. ❌ 重复定义生成的类型
+7. ❌ 空的异常处理
+
+---
+
+## 常见任务
+
+### 修改现有功能
+
+1. 找到 `src/features/[name]/`
+2. 修改前端或后端代码
+3. 如有数据库变更：修改 models.py → 生成迁移 → 应用
+4. 同步类型：`pnpm generate:types`
+
+### 添加共享组件
+
+```typescript
+// 1. src/frontend/shared/components/MyComponent.tsx
+export default function MyComponent() { ... }
+
+// 2. src/frontend/shared/components/index.ts
+export { default as MyComponent } from './MyComponent'
+
+// 3. 使用
+import { MyComponent } from '@/frontend/shared'
+```
+
+### MUI Grid2 使用规范
+
+```typescript
+// ✅ 正确：使用 Grid2 和 size 属性
+import Grid2 from '@mui/material/Grid2'
+
+<Grid2 container spacing={3}>
+  <Grid2 size={{ xs: 12, sm: 6, md: 3 }}>
+    {/* 内容 */}
+  </Grid2>
+</Grid2>
+
+// ❌ 禁止：使用已废弃的 Grid
+import { Grid } from '@mui/material'
+<Grid item xs={12} sm={6} md={3}>  // 废弃语法
+```
+
+---
+
+## 配置
+
+### 后端 (.env)
+
+```bash
+APP_NAME="项目名称 API"
+SECRET_KEY="随机密钥"  # openssl rand -hex 32
+DATABASE_URL="sqlite://./data/db.sqlite3"
+```
+
+### 前端 (.env.local)
+
+```bash
+VITE_APP_NAME="项目名称"
+VITE_API_BASE_URL="/api"
+```
+
+---
+
+## 端口
+
+- 前端: 5173
+- 后端: 9871
+- API 文档: http://localhost:9871/docs
+
+---
+
+## 参考示例
+
+项目包含示例 features：
+
+- `src/features/user/` - 用户认证
+- `src/features/dashboard/` - 仪表盘
+
+---
+
+## 文档
+
+- **快速开始**: `docs/getting-started.md`
+- **开发指南**: `docs/development.md`
+- **配置说明**: `docs/configuration.md`
+- **数据库**: `docs/database.md`
+- **命令参考**: `docs/commands.md`
+- **架构说明**: `docs/architecture.md`
+
+---
+
+## 核心原则
+
+**功能自包含** · **层次清晰** · **类型安全** · **AI 友好**
+
+当被要求添加功能时，严格按照标准流程创建完整的 Feature 结构（前端+后端+迁移+类型）。
