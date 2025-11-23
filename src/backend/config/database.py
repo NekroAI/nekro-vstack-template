@@ -4,11 +4,17 @@
 
 import contextlib
 import sys
-from pathlib import Path
 
 from aerich import Command
 from loguru import logger
 from tortoise import Tortoise
+
+# 引入统一路径管理
+try:
+    from src.backend.core.path_conf import get_resource_path
+except ImportError:
+    # 兼容直接运行此文件的情况 (如有需要)
+    from backend.core.path_conf import get_resource_path
 
 from .settings import settings
 
@@ -37,22 +43,12 @@ async def run_migrations():
     严禁在此处掩盖错误或进行降级处理。
     """
     # 1. 确定 migrations 目录位置
-    if getattr(sys, "frozen", False):
-        # 打包环境: 尝试多个可能的位置
-        # PyInstaller onedir 模式下，datas 可能在 root 或 _internal
-        base_dir = Path(sys.executable).parent
-        possible_paths = [
-            base_dir / "migrations",
-            base_dir / "_internal" / "migrations",
-        ]
-        migrations_dir = next((p for p in possible_paths if p.exists()), None)
-    else:
-        # 开发环境: 项目根目录/migrations
-        migrations_dir = Path("migrations")
+    # 使用统一的资源路径查找器
+    migrations_dir = get_resource_path("migrations")
 
     # 严禁掩盖问题：如果生产环境找不到迁移文件，必须报错
     if not migrations_dir:
-        error_msg = f"❌ CRITICAL: Migrations directory NOT found. Searched in: {possible_paths}"
+        error_msg = "❌ CRITICAL: Migrations directory NOT found via get_resource_path"
         logger.critical(error_msg)
         raise RuntimeError(error_msg)
 

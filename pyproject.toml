@@ -1,6 +1,6 @@
 [project]
 name = "nekro-vstack"
-version = "0.1.13"
+version = "0.1.14"
 description = "Nekro VStack - 垂直切分的 AI 友好全栈开发模板"
 readme = "README.md"
 requires-python = ">=3.11"
