@@ -37,10 +37,9 @@ TORTOISE_ORM = {
 async def run_migrations():
     """
     运行 Aerich 数据库迁移
-    仅在 Windows 桌面应用环境 (frozen) 且使用 SQLite 时调用
-
-    注意：此函数失败会抛出异常，阻止应用启动。
-    严禁在此处掩盖错误或进行降级处理。
+    适用于：
+    1. Windows 桌面应用环境 (frozen)
+    2. Docker 容器环境 (非 frozen, 但 ENVIRONMENT=production) 且使用 SQLite
     """
     # 1. 确定 migrations 目录位置
     # 使用统一的资源路径查找器
@@ -94,6 +93,7 @@ async def init_db():
 
     is_sqlite = settings.DATABASE_URL.startswith("sqlite://")
     is_frozen = getattr(sys, "frozen", False)
+    is_production = settings.ENVIRONMENT == "production"
 
     if settings.ENVIRONMENT == "development" and not is_frozen:
         # 开发环境：自动建表 (如果不使用 aerich)
@@ -101,8 +101,8 @@ async def init_db():
         logger.info("🔧 Development mode: Generating schemas...")
         await Tortoise.generate_schemas(safe=True)
 
-    elif is_sqlite and is_frozen:
-        # 桌面版生产环境：自动迁移
+    elif is_sqlite and (is_frozen or is_production):
+        # 生产环境 + SQLite (无论是 Docker 还是 Windows exe)：自动迁移
         # 如果失败，直接崩溃，绝不使用 generate_schemas 兜底
         await run_migrations()
 

@@ -57,6 +57,9 @@ COPY src/features ./src/features
 # Create data and logs directories
 RUN mkdir -p data logs
 
+# Copy migrations for automatic database upgrades
+COPY migrations ./migrations
+
 # Copy frontend build to static directory
 COPY --from=frontend-builder /app/dist /app/static
 
