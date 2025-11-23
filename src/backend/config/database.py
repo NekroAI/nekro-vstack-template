@@ -2,6 +2,7 @@
 数据库配置（Tortoise-ORM）
 """
 
+import contextlib
 import sys
 from pathlib import Path
 
@@ -66,7 +67,10 @@ async def run_migrations():
 
         # 4. 尝试初始化 aerich 表 (如果不存在)
         # safe=True 保证如果表已存在不报错
-        await command.init_db(safe=True)
+        # 注意：在某些版本 aerich 中，init_db 即使 safe=True 也会尝试创建迁移文件而报错
+        # 我们这里只需要确保 aerich 表存在即可
+        with contextlib.suppress(FileExistsError):
+            await command.init_db(safe=True)
 
         # 5. 执行升级
         # run_in_transaction=True 保证原子性
