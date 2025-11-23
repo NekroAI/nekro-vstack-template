@@ -149,50 +149,63 @@ async def health_check():
     return {"status": "healthy", "version": settings.VERSION}
 
 
-# 静态文件服务 (仅在存在静态文件目录时启用，通常是生产环境 Docker 容器中)
-# 优先从环境变量获取，否则检查默认 Docker 路径
+# 静态文件服务逻辑优化
+# 1. 获取静态文件目录
 static_path_env = os.getenv("STATIC_FILES_DIR")
 if static_path_env:
     static_dir = Path(static_path_env)
 else:
     # 默认 Docker 路径
     static_dir = Path("/app/static")
-
-    # 如果 Docker 路径不存在，尝试检查当前目录下的 static (适应 PyInstaller 打包后的目录结构)
+    # 兼容本地开发或非标准部署
     if not static_dir.exists():
-        local_static = Path("static")  # 相对于工作目录
+        local_static = Path("static")
         if local_static.exists():
             static_dir = local_static.resolve()
 
+logger.info(
+    f"📂 Static files directory: {static_dir.absolute()} (Exists: {static_dir.exists()})",
+)
+
+# 2. 注册静态文件路由
 if static_dir.exists():
-    # 1. 挂载静态资源目录 (assets)
-    # Vite 默认构建输出包含 assets 目录
+    # A. 挂载 assets 目录 (JS/CSS/Images)
+    # Vite 构建产物通常在 assets 子目录下
     assets_dir = static_dir / "assets"
     if assets_dir.exists():
         app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+        logger.info(f"✅ Mounted /assets to {assets_dir}")
 
-    # 2. 挂载其他根目录静态文件 (如 favicon.ico, robots.txt)
-    # 注意：我们需要排除 index.html，因为它由 SPA 路由处理
-    # 但 StaticFiles 默认行为是如果请求目录则找 index.html
-
-    # Catch-all for SPA: 必须放在最后
+    # B. SPA 路由处理 (Catch-all)
+    # 必须放在最后，拦截所有非 API 请求并返回 index.html 或静态文件
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """服务 SPA 前端应用"""
-        # 尝试直接访问文件
+        # 1. 尝试直接访问文件 (如 robots.txt, favicon.ico)
         file_path = static_dir / full_path
         if file_path.exists() and file_path.is_file():
             return FileResponse(file_path)
 
-        # 默认返回 index.html (SPA 路由)
+        # 2. 默认返回 index.html (SPA 路由)
+        # 对于任何不存在的路径，都返回 index.html 让前端路由处理
         index_path = static_dir / "index.html"
         if index_path.exists():
             return FileResponse(index_path)
 
-        return {"error": "Frontend not found at " + str(static_dir)}
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "Frontend not found",
+                "detail": f"Neither {full_path} nor index.html found at {static_dir}",
+            },
+        )
 
 else:
-    # 开发环境根路由
+    logger.warning(
+        f"⚠️ Static directory not found at {static_dir}, frontend will not be served.",
+    )
+
+    # 开发环境提示
     @app.get("/")
     async def root():
         """根路径"""
@@ -201,7 +214,7 @@ else:
             "version": settings.VERSION,
             "description": settings.APP_DESCRIPTION,
             "docs": "/docs",
-            "hint": "Frontend is running separately in development mode",
+            "hint": "Frontend is running separately in development mode (or static build not found)",
         }
 
 
