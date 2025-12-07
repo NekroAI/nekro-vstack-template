@@ -1,158 +1,183 @@
 name: Build and Release
 
 on:
-    push:
-        tags:
-            - "v*"
+  push:
+    tags:
+      - "v*"
 
 env:
-    REGISTRY: ghcr.io
-    IMAGE_NAME: ${{ github.repository }}
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-    # Job 1: Build Docker Image (Linux Server)
-    build-docker:
-        runs-on: ubuntu-latest
-        permissions:
-            contents: write
-            packages: write
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
+  # Job 1: Build Docker Image (Linux Server)
+  build-docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-            - name: Set up QEMU
-              uses: docker/setup-qemu-action@v3
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-            - name: Set up Docker Buildx
-              uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-            - name: Log in to the Container registry
-              uses: docker/login-action@v3
-              with:
-                  registry: ${{ env.REGISTRY }}
-                  username: ${{ github.actor }}
-                  password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-            - name: Extract metadata (tags, labels) for Docker
-              id: meta
-              uses: docker/metadata-action@v5
-              with:
-                  images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-                  tags: |
-                      type=semver,pattern={{version}}
-                      type=semver,pattern={{major}}.{{minor}}
-                      type=raw,value=latest
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
 
-            - name: Build and push Docker image
-              uses: docker/build-push-action@v5
-              with:
-                  context: .
-                  push: true
-                  tags: ${{ steps.meta.outputs.tags }}
-                  labels: ${{ steps.meta.outputs.labels }}
-                  platforms: linux/amd64,linux/arm64
-                  cache-from: type=gha
-                  cache-to: type=gha,mode=max
-                  build-args: |
-                      VITE_APP_NAME=${{ env.VITE_APP_NAME }}
-                      VITE_APP_DESCRIPTION=${{ env.VITE_APP_DESCRIPTION }}
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VITE_APP_NAME=${{ env.VITE_APP_NAME }}
+            VITE_APP_DESCRIPTION=${{ env.VITE_APP_DESCRIPTION }}
 
-    # Job 2: Build Windows Desktop App
-    build-windows:
-        runs-on: windows-latest
-        permissions:
-            contents: write
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
+  # Job 2: Build Windows Desktop App
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-            - name: Install Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 20
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-            - name: Install pnpm
-              uses: pnpm/action-setup@v3
-              with:
-                  version: 9
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
 
-            - name: Install Python
-              uses: actions/setup-python@v5
-              with:
-                  python-version: "3.11"
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-            - name: Build Frontend
-              run: |
-                  pnpm install --frozen-lockfile
-                  Copy-Item build.env .env.production
-                  pnpm build
+      - name: Build Frontend
+        run: |
+          pnpm install --frozen-lockfile
+          Copy-Item build.env .env.production
+          pnpm build
 
-            - name: Install Backend Dependencies
-              run: |
-                  pip install uv
-                  uv pip install --system -r pyproject.toml
-                  # 单独安装 PyInstaller (如果是开发依赖)
-                  pip install pyinstaller
+      - name: Install Backend Dependencies
+        run: |
+          pip install uv
+          uv pip install --system -r pyproject.toml
+          # 单独安装 PyInstaller (如果是开发依赖)
+          pip install pyinstaller
 
-            - name: Generate OpenAPI JSON
-              env:
-                  PYTHONUTF8: 1
-              run: |
-                  $env:PYTHONPATH="."
-                  python scripts/generate-openapi.py
+      - name: Generate OpenAPI JSON
+        env:
+          PYTHONUTF8: 1
+        run: |
+          $env:PYTHONPATH="."
+          python scripts/generate-openapi.py
 
-            - name: Build Windows EXE
-              run: |
-                  pyinstaller build.spec --clean
+      - name: Build Windows EXE
+        run: |
+          pyinstaller build.spec --clean
 
-            - name: Zip Artifacts
-              run: |
-                  Compress-Archive -Path dist/NekroVStack -DestinationPath NekroVStack-Windows-x64.zip
+      - name: Zip Artifacts
+        run: |
+          Compress-Archive -Path dist/NekroVStack -DestinationPath NekroVStack-Windows-x64.zip
 
-            - name: Upload Artifact
-              uses: actions/upload-artifact@v4
-              with:
-                  name: windows-build
-                  path: NekroVStack-Windows-x64.zip
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: NekroVStack-Windows-x64.zip
 
-    # Job 3: Create Release
-    release:
-        needs: [build-docker, build-windows]
-        runs-on: ubuntu-latest
-        permissions:
-            contents: write
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
+  # Job 3: Create Release
+  release:
+    needs: [build-docker, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-            - name: Download Windows Artifact
-              uses: actions/download-artifact@v4
-              with:
-                  name: windows-build
-                  path: release-assets
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-build
+          path: release-assets
 
-            - name: Prepare Docker Assets
-              run: |
-                  mkdir -p release-assets
-                  REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-                  # 将默认的 nekroai/nekro-vstack-template 替换为当前构建的仓库名
-                  sed "s|ghcr.io/nekroai/nekro-vstack-template:latest|${{ env.REGISTRY }}/${REPO_LOWER}:latest|g" deploy/docker-compose.yml > release-assets/docker-compose.yml
+      - name: Extract Changelog for Current Version
+        id: changelog
+        run: |
+          # 提取当前 tag 版本号 (去掉 v 前缀)
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-                  echo "## 部署说明" > release-assets/README.txt
-                  echo "### Docker 部署" >> release-assets/README.txt
-                  echo "1. 确保已安装 Docker 和 Docker Compose。" >> release-assets/README.txt
-                  echo "2. 运行 'docker-compose up -d' 启动服务。" >> release-assets/README.txt
-                  echo "" >> release-assets/README.txt
-                  echo "### Windows 桌面版" >> release-assets/README.txt
-                  echo "1. 解压 NekroVStack-Windows-x64.zip" >> release-assets/README.txt
-                  echo "2. 双击运行 NekroVStack.exe" >> release-assets/README.txt
-                  echo "3. 应用将自动打开浏览器访问 http://localhost:9871" >> release-assets/README.txt
+          # 从 CHANGELOG.md 提取当前版本的更新内容
+          # 使用 awk 提取 ## [VERSION] 到下一个 ## 之间的内容
+          CHANGELOG_CONTENT=$(awk "/## \[$VERSION\]/,/## \[/" CHANGELOG.md | sed '/## \['"$VERSION"'\]/d; /## \[/,$d')
 
-            - name: Create Release
-              uses: softprops/action-gh-release@v1
-              with:
-                  files: |
-                      release-assets/*
-                  generate_release_notes: true
-                  draft: false
-                  prerelease: false
+          # 如果没有提取到内容，报错并终止发布
+          if [ -z "$CHANGELOG_CONTENT" ] || [ "$CHANGELOG_CONTENT" = "" ]; then
+              echo "ERROR: No changelog entry found for version $VERSION in CHANGELOG.md"
+              echo "Please add a changelog entry before releasing."
+              exit 1
+          fi
+
+          # 输出到文件，避免多行文本在 GitHub Actions 中的转义问题
+          echo "$CHANGELOG_CONTENT" > changelog_body.txt
+
+          # 获取上一个 tag，用于生成 Full Changelog 对比链接
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -A1 "^v$VERSION$" | tail -n1)
+
+          # 追加 Full Changelog 链接
+          echo "" >> changelog_body.txt
+          echo "---" >> changelog_body.txt
+          echo "" >> changelog_body.txt
+          if [ -n "$PREVIOUS_TAG" ] && [ "$PREVIOUS_TAG" != "v$VERSION" ]; then
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREVIOUS_TAG}...v${VERSION}" >> changelog_body.txt
+          else
+              # 如果是首次发布，没有上一个 tag
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/commits/v${VERSION}" >> changelog_body.txt
+          fi
+
+      - name: Prepare Docker Assets
+        run: |
+          mkdir -p release-assets
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          # 将默认的 nekroai/nekro-vstack-template 替换为当前构建的仓库名
+          sed "s|ghcr.io/nekroai/nekro-vstack-template:latest|${{ env.REGISTRY }}/${REPO_LOWER}:latest|g" deploy/docker-compose.yml > release-assets/docker-compose.yml
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release-assets/*
+          body_path: changelog_body.txt
+          draft: false
+          prerelease: false
