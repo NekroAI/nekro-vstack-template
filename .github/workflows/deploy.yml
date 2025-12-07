@@ -154,8 +154,8 @@ jobs:
           VERSION=${{ steps.version.outputs.VERSION }}
 
           # 从 CHANGELOG.md 提取当前版本的更新内容
-          # 使用 awk 提取 ## [VERSION] 到下一个 ## 之间的内容
-          CHANGELOG_CONTENT=$(awk "/## \[$VERSION\]/,/## \[/" CHANGELOG.md | sed '/## \['"$VERSION"'\]/d; /## \[/,$d')
+          # 使用 awk 提取 ## [VERSION] 开始，到下一个 ## 或文件末尾
+          CHANGELOG_CONTENT=$(awk "/## \[$VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md)
 
           # 如果没有提取到内容，报错并终止发布
           if [ -z "$CHANGELOG_CONTENT" ] || [ "$CHANGELOG_CONTENT" = "" ]; then
